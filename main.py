@@ -1,168 +1,144 @@
 import pandas as pd
-import os, tempfile
+import os
 import colorama
 import textwrap
 import pyfiglet
+import subprocess
 from tabulate import tabulate
 
 def readcmd(cmd):
-    ftmp = tempfile.NamedTemporaryFile(suffix='.out', prefix='tmp', delete=False)
-    fpath = ftmp.name
-    if os.name=="nt":
-        fpath = fpath.replace("/","\\") # forwin
-    ftmp.close()
-    os.system(cmd + " > " + fpath)
-    data = ""
-    with open(fpath, 'r') as file:
-        data = file.read()
-        file.close()
-    os.remove(fpath)
-    return data
+    result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    return result.stdout
 
-
-def read_excel(type):
+def read_excel(action):
     try:
-        df=pd.read_excel('working.xlsx')
+        df = pd.read_excel('working.xlsx')
         accounts = df.to_dict(orient='records')
-        if type == 'showaccounts':
+        if action == 'showaccounts':
             show_accounts(accounts)
-        if type == 'checklogin':
+        elif action == 'checklogin':
             checklogin(accounts)
-        if type == 'sync':
+        elif action == 'sync':
             sync(accounts)
-        if type == 'showlogs':
+        elif action == 'showlogs':
             show_logs(accounts)
     except Exception as e:
         print(f"Error: {e}")
-        return read_excel(type)
 
 def show_accounts(accounts):
-    response = []
-    response.append(["Index", "From", "To"])
-    index = 0
-    print(f"Total accounts: {len(accounts)}")
-    for account in accounts:
-        index = index + 1
+    response = [["Index", "From", "To"]]
+    for index, account in enumerate(accounts, start=1):
         response.append([index, account["from_user"], account["to_user"]])
     print(colorama.Fore.LIGHTYELLOW_EX)
     print(tabulate(response))
     print(colorama.Fore.RESET)
 
 def checklogin(accounts):
-    response = []
-    response.append(["Index", "From", "To", "Status", 'Message'])
-    index = 0
-    print(f"Total accounts: {len(accounts)}")
-    for account in accounts:
+    response = [["Index", "From", "To", "Status", "Message"]]
+    for index, account in enumerate(accounts, start=1):
         try:
-            index = index + 1
             print(f"Checking {account['from_user']} -> {account['to_user']} ...")
-            result = readcmd(f"imapsync --host1 {account['from_host']} --user1 {account['from_user']} --password1 {account['from_password']}\
-                --host2 {account['to_host']} --user2 {account['to_user']} --password2 {account['to_password']} --justlogin")
-            error_message = []
-            for line in result.split('\n'): 
-                if "Exiting with return value 0" in line:
-                    response.append([index, account["from_user"], account["to_user"], "success", ""])
-                    break
-                elif ": Host1 failure:" in line:
-                    error_message.append(line)
-                elif ": Host2 failure:" in line:
-                    error_message.append(line)
-            if len(error_message) > 0:
-                response.append([index, account["from_user"], account["to_user"], "error", '\n'.join(textwrap.wrap('\n'.join(error_message)))])
+            cmd = [
+                "imapsync",
+                "--host1", account['from_host'],
+                "--user1", account['from_user'],
+                "--password1", account['from_password'],
+                "--host2", account['to_host'],
+                "--user2", account['to_user'],
+                "--password2", account['to_password'],
+                "--justlogin"
+            ]
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            if "Exiting with return value 0" in result.stdout:
+                response.append([index, account["from_user"], account["to_user"], "success", ""])
+            else:
+                error_message = [line for line in result.stdout.split('\n') if "failure:" in line]
+                response.append([index, account["from_user"], account["to_user"], "error", '\n'.join(error_message)])
         except Exception as e:
-            response.append([index, account["from_user"], account["to_user"], "error", e])
+            response.append([index, account["from_user"], account["to_user"], "error", str(e)])
     print(colorama.Fore.LIGHTYELLOW_EX)
     print(tabulate(response))
     print(colorama.Fore.RESET)
 
 def sync(accounts):
-    response = []
-    response.append(["Index", "From", "To", "Status", 'Message'])
-    index = 0
+    response = [["Index", "From", "To", "Status", "Message"]]
     try:
-        fromIndex = int(input("Sync from index: "))
-        toIndex = int(input("Sync to index: "))
-        if fromIndex < index + 1 and fromIndex > len(accounts):
-            print(f'Index from {index + 1} to {len(accounts)}')
-            return False
-        if toIndex < index + 1 and toIndex > len(accounts):
-            print(f'Index from {index + 1} to {len(accounts)}')
-            return False
-    except:
-        print('Input not correct')
-        return False
-    print(f"Total accounts: {len(accounts)}")
-    for account in accounts:
-        try:
-            index = index + 1
-            if fromIndex > index or toIndex < index:
-                continue;
-            print(f"Syncing {account['from_user']} -> {account['to_user']} ...")
-            print(f"imapsync --host1 {account['from_host']} --user1 {account['from_user']} --password1 '{account['from_password']}'\
-                --host2 {account['to_host']} --user2 {account['to_user']} --password2 '{account['to_password']}'")
-            os.system(f"imapsync --host1 {account['from_host']} --user1 {account['from_user']} --password1 '{account['from_password']}'\
-                --host2 {account['to_host']} --user2 {account['to_user']} --password2 '{account['to_password']}'")
-            # error_message = []
-            # for line in result.split('\n'): 
-            #     if ": Host1 failure:" in line:
-            #         error_message.append(line)
-            #     elif ": Host2 failure:" in line:
-            #         error_message.append(line)
-            # if len(error_message) > 0:
-            #     response.append([index, account["from_user"], account["to_user"], "error", '\n'.join(textwrap.wrap('\n'.join(error_message)))])
-            # else:
-            #     response.append([index, account["from_user"], account["to_user"], "success", ""])
-        except Exception as e:
-            response.append([index, account["from_user"], account["to_user"], "error", e])
+        from_index = int(input("Sync from index: "))
+        to_index = int(input("Sync to index: "))
+        if not (1 <= from_index <= len(accounts)) or not (1 <= to_index <= len(accounts)):
+            print(f'Index must be between 1 and {len(accounts)}')
+            return
+    except ValueError:
+        print('Invalid input')
+        return
+    
+    for index, account in enumerate(accounts, start=1):
+        if from_index <= index <= to_index:
+            try:
+                print(f"Syncing {account['from_user']} -> {account['to_user']} ...")
+                sync_cmd = [
+                    "imapsync",
+                    "--addheader",
+                    "--automap",
+                    "--host1", account['from_host'],
+                    "--user1", account['from_user'],
+                    "--password1", account['from_password'],
+                    "--host2", account['to_host'],
+                    "--user2", account['to_user'],
+                    "--password2", account['to_password']
+                ]
+                subprocess.run(sync_cmd)
+            except Exception as e:
+                response.append([index, account["from_user"], account["to_user"], "error", str(e)])
     print(colorama.Fore.LIGHTYELLOW_EX)
     print(tabulate(response))
     print(colorama.Fore.RESET)
 
 def show_logs(accounts):
     try:
-        index = 0
-        logIndex = int(input("Input index to show logs: "))
-        if logIndex < index + 1 and logIndex > len(accounts):
-            print(f'Index from {index + 1} to {len(accounts)}')
-            return False
-    except:
-        print('Input not correct')
-        return False
+        log_index = int(input("Input index to show logs: "))
+        if not (1 <= log_index <= len(accounts)):
+            print(f'Index must be between 1 and {len(accounts)}')
+            return
+    except ValueError:
+        print('Invalid input')
+        return
 
-    for account in accounts:
-        try:
-            index = index + 1
-            if logIndex != index:
-                continue
-            while(True):
-                print(f"Show log file {account['from_user']} -> {account['to_user']} ...")
-                file_list = os.listdir("LOG_imapsync")
-                fileJson = {}
-                response = []
-                response.append(["Index", "Date", "File Name"])
-                fileIndex = 0
-                for file in file_list:
-                    fileSplit = file.split('_')
-                    fileJson["date"] = fileSplit[2] + '/' + fileSplit[1] + '/' + fileSplit[0]\
-                        + ' ' + fileSplit[3] + ':'+ fileSplit[4] + ':'+ fileSplit[5]
-                    fileJson["fromto"] = fileSplit[7] + ' ' + fileSplit[8]
-                    if fileJson["fromto"] == account["from_user"] + ' ' + account["to_user"] + '.txt':
-                        fileIndex = fileIndex + 1
-                        response.append([fileIndex, fileJson["date"], file])
-                print(colorama.Fore.LIGHTYELLOW_EX)
-                print(tabulate(response))
-                print(colorama.Fore.RESET)
+    for index, account in enumerate(accounts, start=1):
+        if log_index == index:
+            try:
+                while True:
+                    print(f"Show log file {account['from_user']} -> {account['to_user']} ...")
+                    file_list = os.listdir("LOG_imapsync")
+                    response = [["Index", "Date", "File Name"]]
+                    fileIndex = 0
+                    for file in file_list:
+                        file_parts = file.split('_')
+                        if len(file_parts) < 9:
+                            continue
+                        file_date = f"{file_parts[2]}/{file_parts[1]}/{file_parts[0]} {file_parts[3]}:{file_parts[4]}:{file_parts[5]}"
+                        fromto = f"{file_parts[7]} {file_parts[8]}"
+                        if fromto == f"{account['from_user']} {account['to_user']}.txt":
+                            fileIndex += 1
+                            response.append([fileIndex, file_date, file])
+                    print(colorama.Fore.LIGHTYELLOW_EX)
+                    print(tabulate(response))
+                    print(colorama.Fore.RESET)
 
-                logFileIndex = int(input("Input index logs file (Press a to break): "))
-                for logFile in response:
-                    if logFile[0] == logFileIndex:
-                        print('Tail 1000 line of file ' + logFile[2])
+                    log_file_index = input("Input index logs file (Press 'a' to break): ")
+                    if log_file_index.lower() == 'a':
+                        break
+                    try:
+                        log_file_index = int(log_file_index)
+                        log_file = next(file for file in response if file[0] == log_file_index)
+                        print(f'Tail 1000 lines of file {log_file[2]}')
                         os.system('clear')
-                        os.system('tail -1000 LOG_imapsync/' + logFile[2])
+                        os.system(f'tail -1000 LOG_imapsync/{log_file[2]}')
                         input("Press any key to exit! ")
-        except Exception as e:
-            print(e)
+                    except (ValueError, StopIteration):
+                        print('Invalid log file index')
+            except Exception as e:
+                print(e)
 
 def main():
     print(pyfiglet.figlet_format("BULK IMAPSYNC"))
@@ -173,23 +149,19 @@ def main():
     3. Sync accounts
     4. Show log file
     """)
-    menu_selected = input("Select tools: ")
+    menu_selected = input("Select tool: ")
     if menu_selected == '0':
         print("Bye!")
         return False
     elif menu_selected == '1':
-        while(read_excel('showaccounts')):
-            pass
+        read_excel('showaccounts')
     elif menu_selected == '2':
-        while(read_excel('checklogin')):
-            pass
+        read_excel('checklogin')
     elif menu_selected == '3':
-        while(read_excel('sync')):
-            pass
+        read_excel('sync')
     elif menu_selected == '4':
-        while(read_excel('showlogs')):
-            pass
+        read_excel('showlogs')
     return True
 
-while(main()):
-   pass
+while main():
+    pass
