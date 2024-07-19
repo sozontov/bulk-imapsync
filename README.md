@@ -6,7 +6,7 @@ Install imapsync service (https://github.com/imapsync/imapsync)
 Run install_OS.sh  to install requirements
 
 # Installation
-```git clone [https://github.com/thesunbg/bulk-imapsync.git](https://github.com/sozontov/bulk-imapsync.git)```
+```git clone https://github.com/sozontov/bulk-imapsync.git```
 
 ```cd bulk-imapsync```
 
